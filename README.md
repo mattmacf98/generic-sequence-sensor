@@ -1,14 +1,12 @@
 # generic-sequence-sensor Module
 
-The `mattmacf:generic-sequence-sensor` module provides a sensor that stores a set of named sequences — each a list of (resource, method) pairs — and lets you tag them at runtime via DoCommand. Readings return the full sequence list annotated with the current tags, making it easy to record what data was captured and under what conditions.
+The `mattmacf:generic-sequence-sensor` module provides a sensor that stores a set of named sequences — each a list of (resource, method) pairs — and manages capture-frequency overrides at runtime. Start a sequence to activate high-frequency capture on configured resources; stop it to zero out capture and clear the tag.
 
 ---
 
 ## Model: `mattmacf:generic-sequence-sensor:generic-sequence-sensor`
 
 **API:** `rdk:component:sensor`
-
-Stores a fixed set of sequence definitions (configured as JSON attributes) and a mutable list of sequence tags managed at runtime through `DoCommand`. `Readings` returns all sequences annotated with the current tags.
 
 ### Configuration
 
@@ -17,8 +15,18 @@ Stores a fixed set of sequence definitions (configured as JSON attributes) and a
   "sequences": [
     {
       "resources": [
-        {"resource_name": "camera-1", "method": "GetImages"},
-        {"resource_name": "arm-1",    "method": "JointPositions"}
+        {
+          "resource_name": "camera-1",
+          "method": "GetImages",
+          "sequence_cap_hz": 10,
+          "tags": ["foo"]
+        },
+        {
+          "resource_name": "arm-1",
+          "method": "JointPositions",
+          "sequence_cap_hz": 5,
+          "tags": ["bar"]
+        }
       ]
     }
   ]
@@ -31,63 +39,63 @@ Stores a fixed set of sequence definitions (configured as JSON attributes) and a
 
 Each entry in `resources`:
 
-| Name            | Type   | Required | Description                                                                          |
-| --------------- | ------ | -------- | ------------------------------------------------------------------------------------ |
-| `resource_name` | string | Yes      | Name of the resource (component or service) involved in this step.                   |
-| `method`        | string | Yes      | Method to associate with this resource. Must be `Readings`, `GetImages`, or `JointPositions`. |
-
-Sequence tags are **not** part of the config — they are set at runtime via `DoCommand` and default to an empty list on startup.
+| Name                | Type     | Required | Description                                                                                   |
+| ------------------- | -------- | -------- | --------------------------------------------------------------------------------------------- |
+| `resource_name`     | string   | Yes      | Name of the resource involved in this step.                                                   |
+| `method`            | string   | Yes      | Method to associate. Must be `Readings`, `GetImages`, or `JointPositions`.                    |
+| `sequence_cap_hz`   | float    | No       | Capture frequency (Hz) to apply when the sequence is active. Defaults to `0`.                 |
+| `tags`              | []string | No       | Data-capture tags to include in overrides for this resource.                                  |
 
 ### Readings
 
-Returns all configured sequences, each annotated with the current in-memory sequence tags:
+Returns all configured sequences annotated with the current active tag, plus a flat `overrides` list for every resource. `capture_frequency_hz` is the configured value while the sequence is running and `0` when stopped.
 
 ```json
 {
   "sequences": [
     {
-      "sequence_tags": ["walking-demo"],
+      "sequence_tags": ["my-tag"],
       "resources": [
         {"resource_name": "camera-1", "method": "GetImages"},
         {"resource_name": "arm-1",    "method": "JointPositions"}
       ]
     }
+  ],
+  "overrides": [
+    {
+      "resource_name": "camera-1",
+      "method": "GetImages",
+      "capture_frequency_hz": 10,
+      "tags": ["foo"]
+    },
+    {
+      "resource_name": "arm-1",
+      "method": "JointPositions",
+      "capture_frequency_hz": 5,
+      "tags": ["bar"]
+    }
   ]
 }
 ```
 
-`sequence_tags` is empty (`[]`) until set via `DoCommand`.
+`sequence_tags` is `[]` and all `capture_frequency_hz` values are `0` until a sequence is started.
 
 ### DoCommand
 
-**`get_sequence_tags`** — Return the current sequence tags.
+**`start`** — Activate the sequence and set the capture-frequency overrides to their configured values.
 
 ```json
-{ "get_sequence_tags": true }
+{"command": "start", "sequence_tag": "my-tag"}
 ```
 
-Returns:
-
-```json
-{ "sequence_tags": ["walking-demo"] }
-```
+Returns `{}`.
 
 ---
 
-**`set_sequence_tags`** — Replace the sequence tags list.
+**`stop`** — Deactivate the sequence. Clears the tag and sets all `capture_frequency_hz` values to `0`.
 
 ```json
-{ "set_sequence_tags": ["walking-demo", "trial-3"] }
+{"command": "stop"}
 ```
 
-Returns:
-
-```json
-{}
-```
-
-Pass an empty list to clear all tags:
-
-```json
-{ "set_sequence_tags": [] }
-```
+Returns `{}`.

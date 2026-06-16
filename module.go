@@ -31,8 +31,10 @@ func init() {
 }
 
 type ResourceConfig struct {
-	ResourceName string `json:"resource_name"`
-	Method       string `json:"method"`
+	ResourceName    string   `json:"resource_name"`
+	Method          string   `json:"method"`
+	SequenceCapHz   float64  `json:"sequence_cap_hz"`
+	Tags            []string `json:"tags"`
 }
 
 type SequenceConfig struct {
@@ -65,8 +67,9 @@ type genericSequenceSensorGenericSequenceSensor struct {
 	logger logging.Logger
 	cfg    *Config
 
-	mu           sync.Mutex
-	sequenceTags []string
+	mu             sync.Mutex
+	sequenceActive bool
+	sequenceTag    string
 
 	cancelCtx  context.Context
 	cancelFunc func()
@@ -98,11 +101,16 @@ func (s *genericSequenceSensorGenericSequenceSensor) Name() resource.Name {
 
 func (s *genericSequenceSensorGenericSequenceSensor) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	s.mu.Lock()
-	tags := make([]interface{}, len(s.sequenceTags))
-	for i, t := range s.sequenceTags {
-		tags[i] = t
-	}
+	active := s.sequenceActive
+	tag := s.sequenceTag
 	s.mu.Unlock()
+
+	var tags []interface{}
+	if tag != "" {
+		tags = []interface{}{tag}
+	} else {
+		tags = []interface{}{}
+	}
 
 	sequences := make([]interface{}, len(s.cfg.Sequences))
 	for i, seq := range s.cfg.Sequences {
@@ -119,42 +127,60 @@ func (s *genericSequenceSensorGenericSequenceSensor) Readings(ctx context.Contex
 		}
 	}
 
+	var overrides []interface{}
+	for _, seq := range s.cfg.Sequences {
+		for _, res := range seq.Resources {
+			hz := 0.0
+			if active {
+				hz = res.SequenceCapHz
+			}
+			resTags := make([]interface{}, len(res.Tags))
+			for i, t := range res.Tags {
+				resTags[i] = t
+			}
+			overrides = append(overrides, map[string]interface{}{
+				"resource_name":        res.ResourceName,
+				"method":               res.Method,
+				"capture_frequency_hz": hz,
+				"tags":                 resTags,
+			})
+		}
+	}
+
 	return map[string]interface{}{
 		"sequences": sequences,
+		"overrides": overrides,
 	}, nil
 }
 
 func (s *genericSequenceSensorGenericSequenceSensor) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	if _, ok := cmd["get_sequence_tags"]; ok {
-		s.mu.Lock()
-		tags := make([]interface{}, len(s.sequenceTags))
-		for i, t := range s.sequenceTags {
-			tags[i] = t
-		}
-		s.mu.Unlock()
-		return map[string]interface{}{"sequence_tags": tags}, nil
+	command, ok := cmd["command"].(string)
+	if !ok {
+		return nil, fmt.Errorf("command field must be a string")
 	}
 
-	if val, ok := cmd["set_sequence_tags"]; ok {
-		rawTags, ok := val.([]interface{})
+	switch command {
+	case "start":
+		tag, ok := cmd["sequence_tag"].(string)
 		if !ok {
-			return nil, fmt.Errorf("set_sequence_tags value must be a list of strings")
-		}
-		tags := make([]string, len(rawTags))
-		for i, v := range rawTags {
-			s, ok := v.(string)
-			if !ok {
-				return nil, fmt.Errorf("set_sequence_tags: element %d is not a string", i)
-			}
-			tags[i] = s
+			return nil, fmt.Errorf("start command requires a sequence_tag string")
 		}
 		s.mu.Lock()
-		s.sequenceTags = tags
+		s.sequenceActive = true
+		s.sequenceTag = tag
 		s.mu.Unlock()
 		return map[string]interface{}{}, nil
-	}
 
-	return nil, fmt.Errorf("unknown command: %v", cmd)
+	case "stop":
+		s.mu.Lock()
+		s.sequenceActive = false
+		s.sequenceTag = ""
+		s.mu.Unlock()
+		return map[string]interface{}{}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown command: %q", command)
+	}
 }
 
 func (s *genericSequenceSensorGenericSequenceSensor) Status(ctx context.Context) (map[string]interface{}, error) {
