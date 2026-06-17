@@ -31,10 +31,10 @@ func init() {
 }
 
 type ResourceConfig struct {
-	ResourceName    string   `json:"resource_name"`
-	Method          string   `json:"method"`
-	SequenceCapHz   float64  `json:"sequence_cap_hz"`
-	Tags            []string `json:"tags"`
+	ResourceName  string   `json:"resource_name"`
+	Method        string   `json:"method"`
+	SequenceCapHz float64  `json:"sequence_cap_hz"`
+	Tags          []string `json:"tags"`
 }
 
 type SequenceConfig struct {
@@ -106,7 +106,9 @@ func (s *genericSequenceSensorGenericSequenceSensor) Readings(ctx context.Contex
 	s.mu.Unlock()
 
 	if !active {
-		return map[string]interface{}{}, nil
+		return map[string]interface{}{
+			"active": false,
+		}, nil
 	}
 
 	var tags []interface{}
