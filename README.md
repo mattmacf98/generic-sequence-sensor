@@ -48,7 +48,7 @@ Each entry in `resources`:
 
 ### Readings
 
-Returns all configured sequences annotated with the current active tag, plus a flat `overrides` list for every resource. `capture_frequency_hz` is the configured value while the sequence is running and `0` when stopped.
+Returns all configured sequences annotated with the current active tag, plus a flat `overrides` list for every resource. `capture_frequency_hz` is the configured value while the sequence is running. When stopped (or before any sequence has been started), returns `{}`.
 
 ```json
 {
@@ -78,8 +78,6 @@ Returns all configured sequences annotated with the current active tag, plus a f
 }
 ```
 
-`sequence_tags` is `[]` and all `capture_frequency_hz` values are `0` until a sequence is started.
-
 ### DoCommand
 
 **`start`** — Activate the sequence and set the capture-frequency overrides to their configured values.
@@ -92,7 +90,7 @@ Returns `{}`.
 
 ---
 
-**`stop`** — Deactivate the sequence. Clears the tag and sets all `capture_frequency_hz` values to `0`.
+**`stop`** — Deactivate the sequence. Clears the tag and causes `Readings` to return `{}`.
 
 ```json
 {"command": "stop"}

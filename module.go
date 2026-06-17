@@ -105,6 +105,10 @@ func (s *genericSequenceSensorGenericSequenceSensor) Readings(ctx context.Contex
 	tag := s.sequenceTag
 	s.mu.Unlock()
 
+	if !active {
+		return map[string]interface{}{}, nil
+	}
+
 	var tags []interface{}
 	if tag != "" {
 		tags = []interface{}{tag}
@@ -130,10 +134,6 @@ func (s *genericSequenceSensorGenericSequenceSensor) Readings(ctx context.Contex
 	var overrides []interface{}
 	for _, seq := range s.cfg.Sequences {
 		for _, res := range seq.Resources {
-			hz := 0.0
-			if active {
-				hz = res.SequenceCapHz
-			}
 			resTags := make([]interface{}, len(res.Tags))
 			for i, t := range res.Tags {
 				resTags[i] = t
@@ -141,7 +141,7 @@ func (s *genericSequenceSensorGenericSequenceSensor) Readings(ctx context.Contex
 			overrides = append(overrides, map[string]interface{}{
 				"resource_name":        res.ResourceName,
 				"method":               res.Method,
-				"capture_frequency_hz": hz,
+				"capture_frequency_hz": res.SequenceCapHz,
 				"tags":                 resTags,
 			})
 		}
